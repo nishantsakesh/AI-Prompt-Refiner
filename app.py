@@ -1,41 +1,44 @@
+# ai_prompt_refiner_v2_deployable.py
 import streamlit as st
 from ctransformers import AutoModelForCausalLM
 import re
 
+# --- Page Config ---
 st.set_page_config(
     page_title="AI Prompt Refiner",
     layout="wide"
 )
 
-@st.cache_resource(show_spinner="Loading the AI Prompt Engineer (Phi-3)...")
+# --- Model Loading (Cached) ---
+@st.cache_resource(show_spinner="Loading the AI Prompt Engineer (TinyLlama)...")
 def load_llm():
     """
-    Loads the Phi-3-mini model.
-    Note: This is a large model and might cause issues on Streamlit's free tier.
-    For deployment, switching to TinyLlama might be necessary.
+    Loads the TinyLlama model, which is small enough for Streamlit's free tier.
     """
+    # --- MODEL FIXED FOR DEPLOYMENT ---
     return AutoModelForCausalLM.from_pretrained(
-        "microsoft/Phi-3-mini-4k-instruct-gguf",
-        model_file="Phi-3-mini-4k-instruct-q4.gguf",
-        model_type="phi3",
+        "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+        model_file="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+        model_type="llama", # Changed model type
         gpu_layers=0,
-        context_length=4000
+        context_length=2048 # Adjusted for TinyLlama
     )
 
+# --- Core Logic: The Master Prompt ---
 def refine_prompt(llm, initial_prompt, context):
     """
     Uses the LLM with a master prompt to refine the user's initial prompt.
     """
     system_prompt = """
-    You are 'PromptPerfect', an expert AI prompt engineer. Your task is to take a user's simple prompt and rewrite it into three distinct, high-quality, and detailed versions to get the best possible response from a powerful AI model like GPT-4 or Gemini.
+    You are 'PromptPerfect', an expert AI prompt engineer. Your task is to take a user's simple prompt and rewrite it into three distinct, high-quality, and detailed versions to get the best possible response from a powerful AI model.
 
     For each refined prompt, apply a combination of these techniques:
     - **Persona:** Assign a role to the AI (e.g., "Act as a world-class chef...").
-    - **Format:** Specify the desired output format (e.g., "Provide the output in a JSON object...", "Use markdown tables...").
+    - **Format:** Specify the desired output format (e.g., "Provide the output in a JSON object...").
     - **Context:** Incorporate the user's provided context.
     - **Examples (Few-shot):** Provide a clear example of the desired output.
-    - **Constraints:** Set rules or negative constraints (e.g., "Do not use technical jargon.", "The response must be under 200 words.").
-    - **Chain of Thought:** Instruct the AI to "think step-by-step" to break down complex problems.
+    - **Constraints:** Set rules or negative constraints (e.g., "Do not use technical jargon.").
+    - **Chain of Thought:** Instruct the AI to "think step-by-step".
 
     Structure your response as follows, using "---" as a separator:
 
@@ -50,17 +53,12 @@ def refine_prompt(llm, initial_prompt, context):
     ```
     (Your second refined prompt goes here)
     ```
-    ---
-    ### Refined Prompt 3
-    **Techniques Used:** [List the techniques you applied]
-    ```
-    (Your third refined prompt goes here)
-    ```
     """
     
     user_content = f"Initial Prompt: \"{initial_prompt}\"\n\nOptional Context: \"{context}\""
 
-    full_prompt = f"<|user|>\n{system_prompt}\n\nHere is the user's request:\n{user_content}<|end|>\n<|assistant|>"
+    # --- PROMPT FORMAT UPDATED FOR TINYLLAMA ---
+    full_prompt = f"<|im_start|>user\n{system_prompt}\n\nHere is the user's request:\n{user_content}<|im_end|>\n<|im_start|>assistant\n"
     
     try:
         response = llm(full_prompt, max_new_tokens=1500, temperature=0.8)
@@ -68,6 +66,7 @@ def refine_prompt(llm, initial_prompt, context):
     except Exception as e:
         return f"An error occurred: {e}"
 
+# --- Streamlit UI ---
 st.title("🚀 AI Prompt Refiner")
 st.caption("Transform your simple ideas into powerful, high-quality prompts for any AI.")
 
@@ -91,9 +90,10 @@ with col1:
 with col2:
     st.subheader("Refined Prompts")
     if 'refined_output' in st.session_state and st.session_state.refined_output:
+        # Split the output into individual prompt sections
         prompts = st.session_state.refined_output.split('---')
         for i, p in enumerate(prompts):
             if p.strip():
                 st.markdown(p.strip())
 
-st.info("This app runs a powerful open-source model locally. The first run will be slow as the model is downloaded. Subsequent runs will be much faster.")
+st.info("This app runs a lightweight open-source model perfect for deployment. The first run will be a bit slow as the model is downloaded.")
